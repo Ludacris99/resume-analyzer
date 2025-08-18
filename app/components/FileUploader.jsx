@@ -1,12 +1,8 @@
 import { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
-interface FileUploaderProps {
-    onFileSelect?: (file: File | null) => void;
-}
-
-const FileUploader = ({ onFileSelect }: FileUploaderProps) => {
-    const onDrop = useCallback((acceptedFiles: File[]) => {
+const FileUploader = () => {
+    const onDrop = useCallback(() => {
         //Do something with the files
         const file = acceptedFiles[0] || null;
         onFileSelect?.(file);
@@ -22,7 +18,7 @@ const FileUploader = ({ onFileSelect }: FileUploaderProps) => {
     const file = acceptedFiles[0] || null;
 
     // function to convert file size to human readable format (bytes->KB/MB)
-    function formatFileSize(bytes: number): string {
+    function formatFileSize(bytes) {
         if (bytes === 0) return "0 Bytes";
         const sizes = ["Bytes", "KB", "MB"];
         const i = Math.floor(Math.log(bytes) / Math.log(1024));
