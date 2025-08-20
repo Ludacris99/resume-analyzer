@@ -19,11 +19,15 @@ const Upload = () => {
     const JobSchema = z.object({
         company: z.string().min(1, "Company name is required"),
         role: z.string().min(1, "Role is required"),
-        description: z.string().min(10, "Job description must be at least 10 characters")
+        description: z.string().min(10, "Job description must be at least 10 characters"),
+        resume: z
+            .custom((file) => file instanceof File, { message: "Resume is required" })
+            .refine((file) => file && file.type === "application/pdf", { message: "Only PDF files are accepted" })
+            .refine((file) => file && file.size <= 2 * 1024 * 1024, { message: "File size must be less than 2MB" }),
     });
 
     //integrating schema to form
-    const { register, handleSubmit, formState: { errors } } = useForm({
+    const { register, handleSubmit, setValue, formState: { errors } } = useForm({
         resolver: zodResolver(JobSchema),
         mode: "onBlur"
     });
@@ -34,8 +38,9 @@ const Upload = () => {
     };
 
     const handleFileSelect = (file) => {
-        setFile(file);
-        setFileExists(true);
+        setFile(file);               //so file exists here so we can submit it along with form data
+        setFileExists(true);         //so button animation triggers
+        setValue("resume", file);    //binds the file to the form so it gets included in the form data
     }
 
     //     const handleAnalyze = async ({companyName, jobTitle, jobDescription, file}) => {
@@ -165,9 +170,11 @@ const Upload = () => {
                                 {/* React Dropzone */}
                                 <div className="form-div">
                                     <label htmlFor="uploader">Upload Resume</label>
-                                    <FileUploader onFileSelect={handleFileSelect} />
+                                    <input type="hidden" {...register("resume")} />
+                                    <FileUploader onFileSelect={handleFileSelect} file={file}/>
                                 </div>
 
+                                {/* Submit Button */}
                                 <div className="w-full flex justify-end">
                                     <button
                                         type="submit"

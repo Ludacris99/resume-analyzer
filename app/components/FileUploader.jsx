@@ -1,25 +1,23 @@
 import { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
-const FileUploader = ({ onFileSelect }) => {
+const FileUploader = ({ onFileSelect, file }) => {
 
     //Accept the file and send it to parent to display in form
-    const onDrop = useCallback(() => {
-        const file = acceptedFiles[0] || null;
+    const onDrop = useCallback((files) => {
+        const file = files[0] || null;
         onFileSelect?.(file);
     }, [onFileSelect]);
 
     //Schema for accepting single PDF file (<2MB) only
-    const { getRootProps, getInputProps, isDragActive, acceptedFiles } = useDropzone({
+    const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop,
         multiple: false,
         accept: { 'application/pdf': ['.pdf'] },
         maxSize: 2 * 1024 * 1024
     })
 
-    const file = acceptedFiles[0] || null;
-
-    //     // function to convert file size to human readable format (bytes->KB/MB)
+    // function to convert file size to human readable format (bytes->KB/MB)
         function formatFileSize(bytes) {
             if (bytes === 0) return "0 Bytes";
             const sizes = ["Bytes", "KB", "MB"];
