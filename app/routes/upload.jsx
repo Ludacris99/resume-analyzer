@@ -7,13 +7,16 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import FileUploader from "../components/FileUploader";
 import clsx from "clsx";
+import { useNavigate } from "react-router";
+import { prepareInstructions } from "../../constants";
 // import { prepareInstructions } from "../../constants";
-// import { useNavigate } from "react-router";
 
 const Upload = () => {
+    const navigate = useNavigate();
     const [isProcessing, setIsProcessing] = useState(false);
     const [file, setFile] = useState(null);
     const [fileExists, setFileExists] = useState(false);
+    const [statusText, setStatusText] = useState("");
 
     // Zod schema define
     const JobSchema = z.object({
@@ -21,7 +24,7 @@ const Upload = () => {
         role: z.string().min(1, "Role is required"),
         description: z.string().min(10, "Job description must be at least 10 characters"),
         resume: z
-            .custom((file) => file instanceof File, { message: "Resume is required" })
+            .custom((file) => file !== null, { message: "Resume is required" })
             .refine((file) => file && file.type === "application/pdf", { message: "Only PDF files are accepted" })
             .refine((file) => file && file.size <= 2 * 1024 * 1024, { message: "File size must be less than 2MB" }),
     });
@@ -32,9 +35,59 @@ const Upload = () => {
         mode: "onBlur"
     });
 
+    const handleAnalyze = async ({ company, job, description, resume }) => {
+        setIsProcessing(true);
+
+        //upload resume to cloud
+        setStatusText('Uploading the resume...');
+        const uploadedResume = await puter.fs.upload([resume]);
+        if (!uploadedResume) return setStatusText('Error: Failed to upload resume');
+
+        //store user data in cloud
+        setStatusText('Analyzing...');
+        const uuid = () => { crypto.randomUUID(); };
+        const data = {
+            id: uuid,
+            resumePath: uploadedResume.path,
+            company,
+            job,
+            description,
+            feedback: '',
+        }
+        await puter.kv.set(`resume:${uuid}`, JSON.stringify(data));
+        
+        //Sending pdf + prompt to AI and getting its response
+        setStatusText('Generating feedback...');
+        const feedback = await puter.ai.chat(
+            [
+                {
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'file',
+                            puter_path: uploadedResume.path
+                        },
+                        {
+                            type: 'text',
+                            text: prepareInstructions({ job, description }) 
+                        }
+                    ]
+                }
+            ], { model: 'claude-sonnet-4'});
+        if (!feedback) return setStatusText('Error: Failed to generate feedback');
+
+        const feedbackText = typeof feedback.message.content === 'string'
+            ? feedback.message.content
+            : feedback.message.content[0].text;
+
+        data.feedback = JSON.parse(feedbackText);
+        await puter.kv.set('resume:${uuid}', JSON.stringify(data));
+        setStatusText("Analysis complete, redirecting...");
+        console.log(data);
+    }
+
     const onSubmit = (data) => {
-        console.log("Form Data:", data);
-        alert("Form submitted successfully!");
+        handleAnalyze(data);
     };
 
     const handleFileSelect = (file) => {
@@ -42,67 +95,6 @@ const Upload = () => {
         setFileExists(true);         //so button animation triggers
         setValue("resume", file);    //binds the file to the form so it gets included in the form data
     }
-
-    //     const handleAnalyze = async ({companyName, jobTitle, jobDescription, file}) => {
-    //         setIsProcessing(true);
-    //         setStatusText('Uploading the file...');
-    //         const uploadedFile  = await fs.upload([file]);
-
-    //         if(!uploadedFile) return setStatusText('Error: Failed to upload file');
-
-    //         setStatusText('Converting to image...');
-    //         const imageFile = await convertPdfToImage(file);
-    //         if(!imageFile.file) return setStatusText('ErrorL Failed to convert PDF to image');
-
-    //         setStatusText('Uploading the iamge...');
-    //         const uploadedImage = await fs.upload([imageFile.file]);
-    //         if(!uploadedImage) return setStatusText('Error: Failed to upload image');
-
-    //         setStatusText('Preparing data...');
-
-    //         const uuid = () => {crypto.randomUUID();};
-
-    //         const data = {
-    //             id: uuid,
-    //             resumePath: uploadedFile.path,
-    //             imagePath: uploadedImage.path,
-    //             companyName, jobTitle, jobDescription,
-    //             feedback: '',
-    //         }
-
-    //         await kv.set(`resume:${uuid}`, JSON.stringify(data));
-    //         setStatusText('Analyzing...');
-
-    //         const feedback = await ai.feedback(
-    //             uploadedFile.path,
-    //             prepareInstructions({ jobTitle, jobDescription })
-    //         )
-
-    //         if(!feedback)   return setStatusText('Error: Failed to analyze resume');
-
-    //         const feedbackText = typeof feedback.message.content === 'string'
-    //          ? feedback.message.content 
-    //          : feedback.message.content[0].text;
-
-    //          data.feedback = JSON.parse(feedbackText);
-    //          await kv.set('resume:${uuid}', JSON.stringify(data));
-    //          setStatusText("Analysis complete, redirecting...");
-    //          console.log(data); 
-    //     }
-
-    //     const handleSubmit = (e) => {
-    //         e.preventDefault();
-    //         const form = e.currentTarget.closest('form');
-    //         if(!form) return;
-    //         const formData = new FormData(form);
-
-    //         const companyName = formData.get('company-name');
-    //         const jobTitle = formData.get('job-title');
-    //         const jobDescription = formData.get('job-description');
-
-    //         if(!file) return;
-    //         handleAnalyze({ companyName, jobTitle, jobDescription, file });
-    //     }
 
     return (
         <main>
@@ -112,7 +104,10 @@ const Upload = () => {
                 <div className="page-heading mt-8">
                     {isProcessing ? (
                         <>
-                            <img src="/images/resume-scan.gif" alt="scan-gif" className="w-full" />
+                            <div className="flex flex-col justify-center items-center h-[700px] p-5">
+                                <h1 className="animate-pulse mt-8">{statusText}</h1>
+                                <img src="/images/resume-scan.gif" alt="scan-gif" width={500} />
+                            </div>
                         </>
                     ) : (
                         <h1>Ready to get hired at your dream job?</h1>
@@ -171,7 +166,7 @@ const Upload = () => {
                                 <div className="form-div">
                                     <label htmlFor="uploader">Upload Resume</label>
                                     <input type="hidden" {...register("resume")} />
-                                    <FileUploader onFileSelect={handleFileSelect} file={file}/>
+                                    <FileUploader onFileSelect={handleFileSelect} file={file} />
                                 </div>
 
                                 {/* Submit Button */}
